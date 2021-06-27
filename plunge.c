@@ -1,6 +1,6 @@
 /* plunge.c - file synchronization utility
  *
- * Copyright (c) 2016-20 Jeffrey Paul Bourdier
+ * Copyright (c) 2016-21 Jeffrey Paul Bourdier
  *
  * Licensed under the MIT License.  This file may be used only in compliance with this License.
  * Software distributed under this License is provided "AS IS", WITHOUT WARRANTY OF ANY KIND.
@@ -14,50 +14,23 @@
  * Include Files *
  *****************/
 
-/* S_IFMT, S_IFREG, stat, (struct) stat */
-#include <sys/stat.h>
-
+#include <sys/stat.h>     /* S_IFMT, S_IFREG, stat, (struct) stat */
 #ifdef _WIN32
-/* (struct) utimbuf, utime */
-#  include <sys/utime.h>
-
-/* _A_SUBDIR, _findclose, (struct) _finddata_t, _findfirst, _findnext, intptr_t */
-#  include <io.h>
+#  include <sys/utime.h>  /* (struct) utimbuf, utime */
+#  include <io.h>         /* _A_SUBDIR, _findclose, (struct) _finddata_t, _findfirst, _findnext, intptr_t */
 #else
-/* (struct) utimbuf, utime */
-#  include <utime.h>
-
-/* closedir, DIR, (struct) dirent, DT_DIR, opendir, readdir */
-#  include <dirent.h>
+#  include <utime.h>      /* (struct) utimbuf, utime */
+#  include <dirent.h>     /* closedir, DIR, (struct) dirent, DT_DIR, opendir, readdir */
 #endif
-
-/* isspace */
-#include <ctype.h>
-
-/* ENOENT, errno */
-#include <errno.h>
-
-/* fgets, perror, puts, stdin */
-#include <stdio.h>
-
-/* EXIT_FAILURE, EXIT_SUCCESS, free, malloc, realloc */
-#include <stdlib.h>
-
-/* time */
-#include <time.h>
-
-/* limits.h:
- *   INT_MIN
- *
- * string.h:
- *   memcpy, strcmp, strlen
- *
- * (struct) jb_command_option, jb_command_parse, JB_DIRECTORY_SEPARATOR, jb_file_read, jb_file_write, jb_string_compare
- */
-#include "jb.h"
-
-/* MAX_LINE_LENGTH, MAX_PATH_LENGTH, path_build, path_output */
-#include "path.h"
+#include <errno.h>        /* ENOENT, errno */
+#include <stdlib.h>       /* EXIT_FAILURE, EXIT_SUCCESS, free, malloc, realloc */
+#include <string.h>       /* memcpy, strcmp, strlen, strncmp */
+#include <time.h>         /* time */
+#include <limits.h>       /* INT_MIN */
+#include <stdio.h>        /* fgets, perror, puts, stdin */
+#include "jb.h"           /* (struct) jb_command_option, jb_command_parse, JB_PATH_SEPARATOR,
+                             jb_file_read, jb_file_write, JB_PATH_MAX_LENGTH, jb_trim */
+#include "path.h"         /* MAX_LINE_LENGTH, path_build, path_output */
 
 
 /**************************
@@ -128,7 +101,6 @@ static const char * STR_SRC_NEWER                   = "Src newer. . . . . . Copy
  * Private Function Declarations *
  *********************************/
 
-char * trim(char * s);
 void process_file(const char * path, const char * src, const char * dst, int flags);
 enum compare_files_result compare_files(const char * src, const char * dst, size_t * size_ptr, time_t * mtime_ptr);
 void copy_file(const char * src, const char * dst, size_t size, time_t mtime);
@@ -152,12 +124,11 @@ int main(int argc, char * argv[])
   {
     { { "verbose", "v" }, 0 },
     { { "dry-run", "n" }, 0 },
-    { { "purge", "p" }, 0 }
+    { { "purge",   "p" }, 0 }
   };
 
   int n, i, b = 0;
-  char s[MAX_PATH_LENGTH];
-  char * p, * q, ** a = NULL;
+  char s[JB_PATH_MAX_LENGTH], * p, * q, ** a = NULL;
 
   /* Verify usage. */
   n = sizeof(options) / sizeof(struct jb_command_option);
@@ -165,23 +136,20 @@ int main(int argc, char * argv[])
   if (n < 0) return (n == INT_MIN) ? EXIT_SUCCESS : EXIT_FAILURE;
 
   /* Input the relative pathname of each file to sync (one per line). */
-  for (i = 0; fgets(s, MAX_PATH_LENGTH, stdin); ++i)
+  for (i = 0; fgets(s, JB_PATH_MAX_LENGTH, stdin); ++i)
   {
     /* Skip empty lines. */
-    p = trim(s);
-    n = strlen(p);
-    if (n < 1) continue;
+    if ((n = strlen(p = jb_trim(s))) < 1) continue;
 
     /* Allocate memory for another character pointer at the end of our array. */
-    a = (char **)(i ? realloc(a, (i + 1) * k) : malloc(k));
+    a = (char **)realloc(a, (i + 1) * k);
 
     /* Allocate memory for a new string and copy the relative pathname of the file into it. */
-    a[i] = (char *)malloc(MAX_PATH_LENGTH);
-    memcpy(a[i], p, ++n);
+    memcpy((a[i] = (char *)malloc(JB_PATH_MAX_LENGTH)), p, ++n);
 
 #ifdef _WIN32
     /* Replace any slashes in the pathname with the platform-dependent directory separator. */
-    for (p = a[i]; *p; ++p) if (*p == '/') *p = JB_DIRECTORY_SEPARATOR;
+    for (p = a[i]; *p; ++p) if (*p == '/') *p = JB_PATH_SEPARATOR;
 #endif
   }
   if (!a) return EXIT_SUCCESS;
@@ -211,8 +179,7 @@ int main(int argc, char * argv[])
   {
     puts(STR_PURGE);
     for (i = 0; i < n; ++i) path_build(a[i], p, a[i]);
-    i = strlen(q);
-    if (q[i - 1] != JB_DIRECTORY_SEPARATOR) ++i;
+    if (q[(i = strlen(q)) - 1] != JB_PATH_SEPARATOR) ++i;
     purge_files(p, q, i, a, n);
   }
 
@@ -228,24 +195,6 @@ int main(int argc, char * argv[])
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Remove leading and trailing white-space characters from a string.
- *   s:  string to remove white-space characters from
- * Return Value:  String with white-space characters removed.
- */
-char * trim(char * s)
-{
-  int i, n = strlen(s);
-
-  /* Reposition null terminator so that there is no trailing white-space. */
-  for (i = n; --i;) { if (!isspace(s[i])) break; }
-  if (++i < n) s[n = i] = '\0';
-
-  /* Return a pointer to the first non-white-space character. */
-  for (i = 0; i < n; ++i) { if (!isspace(s[i])) break; }
-  return &s[i];
-}
-
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * Process (i.e., sync) a given file.
  *   path:  relative pathname of file
  *   src:  source directory pathname
@@ -256,7 +205,7 @@ void process_file(const char * path, const char * src, const char * dst, int fla
 {
   static const int j = MAX_LINE_LENGTH - 18, k = MAX_LINE_LENGTH - 26;
 
-  char r[MAX_PATH_LENGTH], s[MAX_PATH_LENGTH];
+  char r[JB_PATH_MAX_LENGTH], s[JB_PATH_MAX_LENGTH];
   size_t n;
   time_t t;
   enum compare_files_result result;
@@ -385,7 +334,7 @@ void purge_files(const char * src, const char * dst, int offset, char ** paths, 
   int i;
   char * q;
 #ifdef _WIN32
-  char s[MAX_PATH_LENGTH];
+  char s[JB_PATH_MAX_LENGTH];
   intptr_t p;
   struct _finddata_t d;
 #else
@@ -395,15 +344,13 @@ void purge_files(const char * src, const char * dst, int offset, char ** paths, 
 
   /* Iterate through each filename entry in the destination directory. */
 #ifdef _WIN32
-  ((char *)memcpy(s, dst, (i = strlen(dst))))[i] = JB_DIRECTORY_SEPARATOR;
+  ((char *)memcpy(s, dst, (i = strlen(dst))))[i] = JB_PATH_SEPARATOR;
   s[++i] = '*';
   s[++i] = '\0';
-  p = _findfirst(s, &d);
-  if (p < 0) { perror("_findfirst"); return; }
+  if ((p = _findfirst(s, &d)) < 0) { perror("_findfirst"); return; }
   do
 #else
-  p = opendir(dst);
-  if (!p) { perror("opendir"); return; }
+  if (!(p = opendir(dst))) { perror("opendir"); return; }
   while (d = readdir(p))
 #endif
   {
@@ -446,7 +393,8 @@ void purge_files(const char * src, const char * dst, int offset, char ** paths, 
  */
 void purge_file(const char * name, int dir, const char * src, const char * dst, int offset, char ** paths, int path_count)
 {
-  char r[MAX_PATH_LENGTH], s[MAX_PATH_LENGTH];
+  char * p, r[JB_PATH_MAX_LENGTH], s[JB_PATH_MAX_LENGTH];
+  size_t n;
   int i, b = 0;
   struct stat st;
 
@@ -457,16 +405,16 @@ void purge_file(const char * name, int dir, const char * src, const char * dst, 
   path_build(r, src, name);
   if (dir)
   {
-    i = strlen(r);
-    r[i] = JB_DIRECTORY_SEPARATOR;
-    r[++i] = '\0';
+    r[n = strlen(r)] = JB_PATH_SEPARATOR;
+    r[++n] = '\0';
 
     /* If the pathname appears in the list of files to skip, don't report it. */
     for (i = 0; i < path_count; ++i)
     {
-      if (strlen(paths[i]) < strlen(r)) continue;
-      if (!jb_string_compare(paths[i], r)) { b = 1; break; }
+      if (strlen(p = paths[i]) < n) continue;
+      if (!strncmp(p, r, n)) { b = 1; break; }
     }
+    r[--n] = '\0';
   } else for (i = 0; i < path_count; ++i) if (!strcmp(paths[i], r)) { b = 1; break; }
 
   /* If the file was not skipped, check for its existence in the source directory. */

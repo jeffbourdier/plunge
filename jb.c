@@ -1,6 +1,6 @@
 /* jb.c - Jeff Bourdier (JB) library
  *
- * Copyright (c) 2017-20 Jeffrey Paul Bourdier
+ * Copyright (c) 2017-21 Jeffrey Paul Bourdier
  *
  * Licensed under the MIT License.  This file may be used only in compliance with this License.
  * Software distributed under this License is provided "AS IS", WITHOUT WARRANTY OF ANY KIND.
@@ -14,63 +14,24 @@
  * Include Files *
  *****************/
 
-/* mkdir, stat, (struct) stat */
-#include <sys/stat.h>
-
+#include <sys/stat.h>  /* mkdir, stat, (struct) stat */
+#include <ctype.h>     /* isspace */
+#include <errno.h>     /* ENOENT, errno */
 #ifdef _WIN32
-/* _mkdir */
-#  include <direct.h>
+#  include <direct.h>  /* _mkdir */
 #else
-/* basename, dirname */
-#  include <libgen.h>
+#  include <libgen.h>  /* basename, dirname */
 #endif
-
-/* ENOENT, errno */
-#include <errno.h>
-
-/* fclose, FILE, fopen/fopen_s, fprintf, fwrite, putchar, puts, stderr */
-#include <stdio.h>
-
-/* free, malloc */
-#include <stdlib.h>
-
-/* limits.h:
- *   INT_MIN
- *
- * string.h:
- *   strcmp, strdup, strlen, strrchr
- *
- * (struct) jb_command_option, JB_DIRECTORY_SEPARATOR
- */
-#include "jb.h"
-
-
-/*********************
- * Macro Definitions *
- *********************/
-
-/* On Win32, fopen is considered "unsafe" and results in error C4996.
- * The corresponding "safe" function, fopen_s, is used instead.
- */
-#ifdef _WIN32
-#  define OPEN_FILE(stream_ptr, pathname, mode) fopen_s(stream_ptr, pathname, mode)
-#else
-#  define OPEN_FILE(stream_ptr, pathname, mode) ((*stream_ptr = fopen(pathname, mode)) ? 0 : errno)
-#endif
+#include <limits.h>    /* INT_MIN */
+#include <stdio.h>     /* fclose, FILE, fprintf, fwrite, putchar, puts, stderr */
+#include <stdlib.h>    /* free, malloc */
+#include <string.h>    /* strcmp, strdup, strlen, strncmp, strrchr */
+#include "jb.h"        /* (struct) jb_command_option, JB_PATH_SEPARATOR, jb_exe_strip, jb_file_open */
 
 
 /*********************************
  * Private Function Declarations *
  *********************************/
-
-#ifdef _WIN32
-/* On Linux, these functions are defined in libgen.h.  There are no Win32 equivalents. */
-char * basename(char * path);
-char * dirname(char * path);
-
-/* This function applies only to Win32. */
-void strip_executable(char * filename);
-#endif
 
 int validate_option(struct jb_command_option * options, int option_count, const char * text, int which);
 int make_directory(const char * path);
@@ -80,6 +41,52 @@ int make_directory(const char * path);
  * Functions *
  *************/
 
+
+#ifdef _WIN32
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+ * Return the last component of a pathname.  For more information, see:
+ * https://pubs.opengroup.org/onlinepubs/9699919799/functions/basename.html
+ * (On Linux, this function is defined in libgen.h.  There is no Win32 equivalent.)
+ */
+char * basename(char * path)
+{
+  char * p = strrchr(path, JB_PATH_SEPARATOR);
+  return p ? p + 1 : path;
+}
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+ * Report the parent directory name of a file pathname.  For more information, see:
+ * https://pubs.opengroup.org/onlinepubs/9699919799/functions/dirname.html
+ * (On Linux, this function is defined in libgen.h.  There is no Win32 equivalent.)
+ */
+char * dirname(char * path)
+{
+  char * p = strrchr(path, JB_PATH_SEPARATOR);
+  if (!p) return path + strlen(path);
+  *p = '\0';
+  return path;
+}
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+ * Strip the extension off of an executable filename.
+ *   filename:  name of executable file (without path)
+ */
+void jb_exe_strip(char * filename)
+{
+  static const char * exe = ".exe";
+
+  size_t n = strlen(filename), m = strlen(exe);
+  char * p;
+
+  if (n > m)
+  {
+    p = filename + n - m;
+    if (!strcmp(p, exe)) *p = '\0';
+  }
+}
+
+#endif
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * Check command line arguments.
@@ -138,12 +145,10 @@ int jb_command_parse(int argc, char * argv[], const char * usage, const char * h
       /* If the "help" option is present, print a full usage/help message (and exit). */
       if (n == INT_MIN)
       {
-        printf(usage_format, p, usage);
-        puts(help);
-
+        printf(usage_format, p, usage); puts(help);
 #ifdef _WIN32
         /* It is assumed that on Win32, the filename ends in ".exe" (whereas on Linux, the filename has no extension). */
-        strip_executable(p);
+        jb_exe_strip(p);
 #endif
         printf(home_page_format, p);
       }
@@ -178,14 +183,14 @@ void * jb_file_read(const char * path, size_t size)
   int n;
 
   /* Allocate memory for a buffer to store the data read from the file. */
-  if (!(p = malloc(size))) { perror("malloc"); return NULL; }
+  if (!(p = malloc(size + 1))) { perror("malloc"); return NULL; }
 
   /* Open the file for reading.
    * Note that on Win32, by default, a file is opened in text mode, which means that "\r\n" is translated to
    * "\n" on input.  Open the file in binary mode, so that no such translation occurs.  (Linux, being (mostly)
-   * POSIX-compliant, does not suffer from this problem.  See also the comment on OPEN_FILE in jb_file_write.)
+   * POSIX-compliant, does not suffer from this problem.  See also the comment on jb_file_open in jb_file_write.)
    */
-  if (OPEN_FILE(&f, path, "rb") || !f) { perror("fopen"); free(p); return NULL; }
+  if (jb_file_open(&f, path, "rb") || !f) { perror("fopen"); free(p); return NULL; }
 
   /* Read the contents of the file into our buffer. */
   if (fread(p, 1, size, f) < size) { perror("fread"); n = errno; free(p); fclose(f); errno = n; return NULL; }
@@ -211,9 +216,9 @@ int jb_file_write(const char * path, const void * buffer, size_t size)
   /* Open the file for writing.
    * Note that on Win32, by default, a file is opened in text mode, which means that "\n" is translated to
    * "\r\n" on output.  Open the file in binary mode, so that no such translation occurs.  (Linux, being (mostly)
-   * POSIX-compliant, does not suffer from this problem.  See also the comment on OPEN_FILE in jb_file_read.)
+   * POSIX-compliant, does not suffer from this problem.  See also the comment on jb_file_open in jb_file_read.)
    */
-  if (OPEN_FILE(&f, path, "wb") || !f) { perror("fopen"); return -1; }
+  if (jb_file_open(&f, path, "wb") || !f) { perror("fopen"); return -1; }
 
   /* Write the buffer contents to the path. */
   if (fwrite(buffer, 1, size, f) < size) { perror("fwrite"); n = errno; fclose(f); errno = n; return -1; }
@@ -221,51 +226,23 @@ int jb_file_write(const char * path, const void * buffer, size_t size)
   return 0;
 }
 
-#ifdef _WIN32
-
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Return the last component of a pathname.  For more information, see:
- * https://pubs.opengroup.org/onlinepubs/9699919799/functions/basename.html
- * (On Linux, this function is defined in libgen.h.  There is no Win32 equivalent.)
+ * Remove leading and trailing white-space characters from a string.
+ *   s:  string to remove white-space characters from
+ * Return Value:  String with white-space characters removed.
  */
-char * basename(char * path)
+char * jb_trim(char * s)
 {
-  char * p = strrchr(path, JB_DIRECTORY_SEPARATOR);
-  return p ? p + 1 : path;
+  int i, n = strlen(s);
+
+  /* Reposition null terminator so that there is no trailing white-space. */
+  for (i = n; --i;) { if (!isspace(s[i])) break; }
+  if (++i < n) s[n = i] = '\0';
+
+  /* Return a pointer to the first non-white-space character. */
+  for (i = 0; i < n; ++i) { if (!isspace(s[i])) break; }
+  return &s[i];
 }
-
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Report the parent directory name of a file pathname.  For more information, see:
- * https://pubs.opengroup.org/onlinepubs/9699919799/functions/dirname.html
- * (On Linux, this function is defined in libgen.h.  There is no Win32 equivalent.)
- */
-char * dirname(char * path)
-{
-  char * p = strrchr(path, JB_DIRECTORY_SEPARATOR);
-  if (!p) return path + strlen(path);
-  *p = '\0';
-  return path;
-}
-
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Strip the extension off of an executable filename.
- *   filename:  name of executable file (without path)
- */
-void strip_executable(char * filename)
-{
-  static const char * exe = ".exe";
-
-  size_t n = strlen(filename), m = strlen(exe);
-  char * p;
-
-  if (n > m)
-  {
-    p = filename + n - m;
-    if (!strcmp(p, exe)) *p = '\0';
-  }
-}
-
-#endif
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * Determine if a string is a valid command line option.
@@ -304,8 +281,7 @@ int validate_option(struct jb_command_option * options, int option_count, const 
     if (s[strlen(s) - 1] == '=') return (*(options[i].argument = text + n)) ? 1 : -1;
 
     /* Indicate that the option is present and return (valid). */
-    options[i].is_present = 1;
-    return 0;
+    options[i].is_present = 1; return 0;
   }
 
   /* If the string does not match any option, the command line is invalid. */
