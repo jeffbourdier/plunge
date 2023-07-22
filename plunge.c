@@ -222,15 +222,15 @@ void process_file(const char * path, const char * src, const char * dst, int fla
    */
   switch (result)
   {
-  case COMPARE_FILES_ERROR:        if (v) p = STR_ERROR;                b = 0; break;
-  case COMPARE_FILES_SRC_NO_EXIST: if (v) p = STR_SRC_NO_EXIST;         b = 0; break;
-  case COMPARE_FILES_SRC_NOT_FILE: if (v) p = STR_SRC_NOT_FILE;         b = 0; break;
-  case COMPARE_FILES_DST_NO_EXIST: p = v ? STR_DST_NO_EXIST : STR_NEW;  b = 1; break;
-  case COMPARE_FILES_DST_NOT_FILE: if (v) p = STR_DST_NOT_FILE;         b = 0; break;
-  case COMPARE_FILES_SAME_AGE:     if (v) p = STR_SAME_AGE;             b = 0; break;
-  case COMPARE_FILES_DST_NEWER:    if (v) p = STR_DST_NEWER;            b = 0; break;
-  case COMPARE_FILES_SRC_LARGER:   p = v ? STR_SRC_LARGER : STR_LARGER; b = 1; break;
-  case COMPARE_FILES_SRC_NEWER:    p = v ? STR_SRC_NEWER : STR_NEWER;   b = 1; break;
+    case COMPARE_FILES_ERROR:        if (v) p = STR_ERROR;                b = 0; break;
+    case COMPARE_FILES_SRC_NO_EXIST: if (v) p = STR_SRC_NO_EXIST;         b = 0; break;
+    case COMPARE_FILES_SRC_NOT_FILE: if (v) p = STR_SRC_NOT_FILE;         b = 0; break;
+    case COMPARE_FILES_DST_NO_EXIST: p = v ? STR_DST_NO_EXIST : STR_NEW;  b = 1; break;
+    case COMPARE_FILES_DST_NOT_FILE: if (v) p = STR_DST_NOT_FILE;         b = 0; break;
+    case COMPARE_FILES_SAME_AGE:     if (v) p = STR_SAME_AGE;             b = 0; break;
+    case COMPARE_FILES_DST_NEWER:    if (v) p = STR_DST_NEWER;            b = 0; break;
+    case COMPARE_FILES_SRC_LARGER:   p = v ? STR_SRC_LARGER : STR_LARGER; b = 1; break;
+    case COMPARE_FILES_SRC_NEWER:    p = v ? STR_SRC_NEWER : STR_NEWER;   b = 1; break;
   }
 
   /* If appropriate, output the message and/or copy the source to the destination. */
@@ -254,8 +254,7 @@ enum compare_files_result compare_files(const char * src, const char * dst, size
   if (stat(src, &src_stat))
   {
     if (errno == ENOENT) return COMPARE_FILES_SRC_NO_EXIST;
-    perror("stat");
-    return COMPARE_FILES_ERROR;
+    perror("stat"); return COMPARE_FILES_ERROR;
   }
 
   /* The source file exists.  If it is not a regular file, return that result. */
@@ -269,8 +268,7 @@ enum compare_files_result compare_files(const char * src, const char * dst, size
   if (stat(dst, &dst_stat))
   {
     if (errno == ENOENT) return COMPARE_FILES_DST_NO_EXIST;
-    perror("stat");
-    return COMPARE_FILES_ERROR;
+    perror("stat"); return COMPARE_FILES_ERROR;
   }
 
   /* The destination file exists.  If it is not a regular file, return that result. */
@@ -345,8 +343,7 @@ void purge_files(const char * src, const char * dst, int offset, char ** paths, 
   /* Iterate through each filename entry in the destination directory. */
 #ifdef _WIN32
   ((char *)memcpy(s, dst, (i = strlen(dst))))[i] = JB_PATH_SEPARATOR;
-  s[++i] = '*';
-  s[++i] = '\0';
+  s[++i] = '*'; s[++i] = '\0';
   if ((p = _findfirst(s, &d)) < 0) { perror("_findfirst"); return; }
   do
 #else
@@ -356,11 +353,9 @@ void purge_files(const char * src, const char * dst, int offset, char ** paths, 
   {
     /* Determine the name of the file, and whether or not it's actually a directory. */
 #ifdef _WIN32
-    q = d.name;
-    i = (d.attrib & _A_SUBDIR);
+    q = d.name; i = (d.attrib & _A_SUBDIR);
 #else
-    q = d->d_name;
-    i = (d->d_type == DT_DIR);
+    q = d->d_name; i = (d->d_type == DT_DIR);
 #endif
 
     /* Report the file if appropriate (i.e., if there is not a corresponding file in the source directory).
@@ -405,8 +400,7 @@ void purge_file(const char * name, int dir, const char * src, const char * dst, 
   path_build(r, src, name);
   if (dir)
   {
-    r[n = strlen(r)] = JB_PATH_SEPARATOR;
-    r[++n] = '\0';
+    r[n = strlen(r)] = JB_PATH_SEPARATOR; r[++n] = '\0';
 
     /* If the pathname appears in the list of files to skip, don't report it. */
     for (i = 0; i < path_count; ++i)
