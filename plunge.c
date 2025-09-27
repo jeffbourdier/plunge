@@ -1,6 +1,6 @@
 /* plunge.c - file synchronization utility
  *
- * Copyright (c) 2016-21 Jeffrey Paul Bourdier
+ * Copyright (c) 2016-25 Jeffrey Paul Bourdier
  *
  * Licensed under the MIT License.  This file may be used only in compliance with this License.
  * Software distributed under this License is provided "AS IS", WITHOUT WARRANTY OF ANY KIND.
@@ -28,8 +28,8 @@
 #include <time.h>         /* time */
 #include <limits.h>       /* INT_MIN */
 #include <stdio.h>        /* fgets, perror, puts, stdin */
-#include "jb.h"           /* (struct) jb_command_option, jb_command_parse, JB_PATH_SEPARATOR,
-                             jb_file_read, jb_file_write, JB_PATH_MAX_LENGTH, jb_trim */
+#include "jb.h"           /* (struct) jb_command_option, jb_command_parse, jb_file_copy,
+                             JB_PATH_MAX_LENGTH, JB_PATH_SEPARATOR, jb_trim */
 #include "path.h"         /* MAX_LINE_LENGTH, path_build, path_output */
 
 
@@ -55,7 +55,7 @@ enum compare_files_result
  * Constants *
  *************/
 
-static const char * STR_USAGE = "SOURCE DEST";
+static const char * STR_USAGE = " SOURCE DEST";
 static const char * STR_HELP =
   "Synchronize (copy) newer files of corresponding names from SOURCE into DEST.\n"
   "Options:\n"
@@ -285,13 +285,7 @@ enum compare_files_result compare_files(const char * src, const char * dst, size
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- * Copy a file.
- * (While it might be tempting to have the shell/OS execute this command (say,
- * via the 'system' function), we choose not to, for the following reasons:
- *   - Portability.  The command would be different depending on the OS ('copy' on Win32 vs. 'cp' on Linux).
- *   - Efficiency.  We'd rather not spawn a child process if we don't have to.
- * Surprisingly, there's no cross-platform functionality to do this without invoking the
- * shell/OS.  (Win32 has CopyFile, but Linux has no equivalent.)  Thus, we write our own.)
+ * Copy a file, including its modification time.
  *   src:  absolute pathname of source file
  *   dst:  absolute pathname of destination file
  *   size:  size (in bytes) of source file
@@ -299,17 +293,10 @@ enum compare_files_result compare_files(const char * src, const char * dst, size
  */
 void copy_file(const char * src, const char * dst, size_t size, time_t mtime)
 {
-  void * p;
-  int n;
   struct utimbuf t;
 
-  /* Read the file into a buffer. */
-  if (!(p = jb_file_read(src, size))) return;
-
-  /* Write the contents of the buffer (source file) to the destination file. */
-  n = jb_file_write(dst, p, size);
-  free(p);
-  if (n) return;
+  /* Copy the file. */
+  if (jb_file_copy(src, dst, size)) return;
 
   /* Set the modification time of the destination file to that of the source file, so that the next time
    * this runs, we realize that the source and destination files are identical (size-wise and time-wise).

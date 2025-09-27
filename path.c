@@ -1,6 +1,6 @@
 /* path.c - path functions for Plunge
  *
- * Copyright (c) 2016-21 Jeffrey Paul Bourdier
+ * Copyright (c) 2016-25 Jeffrey Paul Bourdier
  *
  * Licensed under the MIT License.  This file may be used only in compliance with this License.
  * Software distributed under this License is provided "AS IS", WITHOUT WARRANTY OF ANY KIND.
@@ -16,7 +16,7 @@
 
 #include <string.h>  /* memcpy, strlen */
 #include <stdio.h>   /* printf */
-#include "jb.h"      /* JB_PATH_SEPARATOR, JB_PATH_MAX_LENGTH */
+#include "jb.h"      /* JB_PATH_MAX_LENGTH, JB_PATH_SEPARATOR */
 #include "path.h"    /* MAX_LINE_LENGTH */
 
 

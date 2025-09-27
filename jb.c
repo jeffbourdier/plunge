@@ -1,6 +1,6 @@
 /* jb.c - Jeff Bourdier (JB) library
  *
- * Copyright (c) 2017-23 Jeffrey Paul Bourdier
+ * Copyright (c) 2017-25 Jeffrey Paul Bourdier
  *
  * Licensed under the MIT License.  This file may be used only in compliance with this License.
  * Software distributed under this License is provided "AS IS", WITHOUT WARRANTY OF ANY KIND.
@@ -151,6 +151,33 @@ void jb_command_error(char * path, const char * usage)
   char * p = basename(path);
   fprintf(stderr, STR_USAGE_FORMAT, p, usage);
   fprintf(stderr, STR_HELP_FORMAT, p);
+}
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+ * Copy a file.
+ * (While it might be tempting to have the shell/OS execute this command (say,
+ * via the 'system' function), we choose not to, for the following reasons:
+ *   - Portability.  The command would be different depending on the OS ('copy' on Win32 vs. 'cp' on Linux).
+ *   - Efficiency.  We'd rather not spawn a child process if we don't have to.
+ * Surprisingly, there's no cross-platform functionality to do this without invoking the
+ * shell/OS.  (Win32 has CopyFile, but Linux has no equivalent.)  Thus, we write our own.)
+ *   src:  absolute pathname of source file
+ *   dst:  absolute pathname of destination file
+ *   size:  size (in bytes) of source file
+ * Return Value:  Zero on success; otherwise, nonzero (and errno is set appropriately).
+ */
+int jb_file_copy(const char * src, const char * dst, size_t size)
+{
+  void * p;
+  int n;
+
+  /* Read the file into a buffer. */
+  if (!(p = jb_file_read(src, size))) return -1;
+
+  /* Write the contents of the buffer (source file) to the destination file. */
+  n = jb_file_write(dst, p, size);
+  free(p);
+  return n;
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
