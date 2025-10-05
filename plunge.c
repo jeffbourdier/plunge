@@ -27,10 +27,9 @@
 #include <string.h>       /* memcpy, strcmp, strlen, strncmp */
 #include <time.h>         /* time */
 #include <limits.h>       /* INT_MIN */
-#include <stdio.h>        /* fgets, perror, puts, stdin */
+#include <stdio.h>        /* fgets, perror, printf, puts, stdin */
 #include "jb.h"           /* (struct) jb_command_option, jb_command_parse, jb_file_copy,
-                             JB_PATH_MAX_LENGTH, JB_PATH_SEPARATOR, jb_trim */
-#include "path.h"         /* MAX_LINE_LENGTH, path_build, path_output */
+                             jb_path_build, JB_PATH_MAX_LENGTH, JB_PATH_SEPARATOR, jb_trim */
 
 
 /**************************
@@ -92,6 +91,8 @@ static const char * STR_SRC_NEWER                   = "Src newer. . . . . . Copy
  * Macro Definitions *
  *********************/
 
+#define MAX_LINE_LENGTH 78
+
 /* Flags for process_file */
 #define PROCESS_FILE_VERBOSE  0x1
 #define PROCESS_FILE_DRY_RUN  0x2
@@ -106,6 +107,7 @@ enum compare_files_result compare_files(const char * src, const char * dst, size
 void copy_file(const char * src, const char * dst, size_t size, time_t mtime);
 void purge_files(const char * src, const char * dst, int offset, char ** paths, int path_count);
 void purge_file(const char * name, int dir, const char * src, const char * dst, int offset, char ** paths, int path_count);
+void output_path(const char * path, int width);
 
 
 /*************
@@ -178,7 +180,7 @@ int main(int argc, char * argv[])
   if (options[2].is_present)
   {
     puts(STR_PURGE);
-    for (i = 0; i < n; ++i) path_build(a[i], p, a[i]);
+    for (i = 0; i < n; ++i) jb_path_build(a[i], p, a[i]);
     if (q[(i = strlen(q)) - 1] != JB_PATH_SEPARATOR) ++i;
     purge_files(p, q, i, a, n);
   }
@@ -213,8 +215,8 @@ void process_file(const char * path, const char * src, const char * dst, int fla
   int b, v = flags & PROCESS_FILE_VERBOSE;
 
   /* Compare the source and destination files, by absolute pathnames. */
-  path_build(r, src, path);
-  path_build(s, dst, path);
+  jb_path_build(r, src, path);
+  jb_path_build(s, dst, path);
   result = compare_files(r, s, &n, &t);
 
   /* Build the appropriate message and decide whether or not to copy
@@ -234,7 +236,7 @@ void process_file(const char * path, const char * src, const char * dst, int fla
   }
 
   /* If appropriate, output the message and/or copy the source to the destination. */
-  if (p) { path_output(path, v ? k : j); puts(p); }
+  if (p) { output_path(path, v ? k : j); puts(p); }
   if (b && !(flags & PROCESS_FILE_DRY_RUN)) copy_file(r, s, n, t);
 }
 
@@ -384,7 +386,7 @@ void purge_file(const char * name, int dir, const char * src, const char * dst, 
   if (dir && (!strcmp(name, ".") || !strcmp(name, ".."))) return;
 
   /* Build the absolute pathname of the source file. */
-  path_build(r, src, name);
+  jb_path_build(r, src, name);
   if (dir)
   {
     r[n = strlen(r)] = JB_PATH_SEPARATOR; r[++n] = '\0';
@@ -414,15 +416,51 @@ void purge_file(const char * name, int dir, const char * src, const char * dst, 
   if (b && !dir) return;
 
   /* Build the absolute pathname of the destination file. */
-  path_build(s, dst, name);
+  jb_path_build(s, dst, name);
 
   /* If the file does not exist in the source directory, it probably
    * should not exist in the destination directory either, so report it.
    */
-  if (!b) path_output(s + offset, MAX_LINE_LENGTH);
+  if (!b) output_path(s + offset, MAX_LINE_LENGTH);
 
   /* Otherwise, the file must be a directory (and there is a corresponding
    * subdirectory in the source directory).  Recursively purge its contents.
    */
   else purge_files(r, s, offset, paths, path_count);
+}
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+ * Output a relative pathname within a given field width (shortened as necessary),
+ * left-justified, with a trailing newline or right-padded with double-spaced dots.
+ *   path:  relative pathname
+ *   width:  field width
+ */
+void output_path(const char * path, int width)
+{
+  static const int v = 3, w = 6;
+
+  int n, m, i, j, k;
+  char s[MAX_LINE_LENGTH];
+
+  /* If the width is less than the maximum line length, output with padding (instead of a trailing newline). */
+  m = (width < MAX_LINE_LENGTH) ? width - v : width;
+
+  /* If necessary, shorten the pathname to fit within the field. */
+  if ((n = strlen(path)) > m)
+  {
+    for (i = n - 1; i > w && path[i] != JB_PATH_SEPARATOR; --i);
+    while ((k = m - (j = n - i)) < w) ++i;
+    memcpy(s, path, n = k - v);
+    while (n < k) s[n++] = '.';
+    memcpy(s + n, path + i, j);
+    n = m;
+  }
+  else memcpy(s, path, n);
+
+  /* If appropriate, right-pad the field with double-spaced dots.  (Otherwise, append a newline.) */
+  if (m < width) while (n < width) { s[n] = ((width - n) % 2) ? ' ' : '.'; ++n; }
+  else s[n++] = '\n';
+
+  /* Finally, null-terminate and output the string buffer. */
+  s[n] = '\0'; printf("%s", s);
 }

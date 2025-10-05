@@ -32,8 +32,8 @@
 #include <limits.h>    /* INT_MIN */
 #include <stdio.h>     /* fclose, FILE, fopen, fprintf, fwrite, putchar, puts, stderr */
 #include <stdlib.h>    /* free, malloc */
-#include <string.h>    /* strcmp, strdup, strlen, strncmp, strrchr */
-#include "jb.h"        /* jb_command_error, (struct) jb_command_option, JB_PATH_SEPARATOR */
+#include <string.h>    /* memcpy, strcmp, strdup, strlen, strncmp, strrchr */
+#include "jb.h"        /* jb_command_error, (struct) jb_command_option, JB_PATH_MAX_LENGTH, JB_PATH_SEPARATOR */
 
 
 /*************
@@ -235,6 +235,23 @@ int jb_file_write(const char * path, const void * buffer, size_t size)
   if (fwrite(buffer, 1, size, f) < size) { perror("fwrite"); n = errno; fclose(f); errno = n; return -1; }
   if (fclose(f)) { perror("fclose"); return -1; }
   return 0;
+}
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+ * Build an absolute pathname from a directory pathname and a relative pathname.
+ *   abs:  receives absolute pathname
+ *   dir:  directory pathname
+ *   rel:  relative pathname
+ */
+void jb_path_build(char * abs, const char * dir, const char * rel)
+{
+  size_t i = strlen(dir), n = strlen(rel) + 1;
+  char s[JB_PATH_MAX_LENGTH];
+
+  memcpy(s, dir, i);
+  if (s[i - 1] != JB_PATH_SEPARATOR) s[i++] = JB_PATH_SEPARATOR;
+  memcpy(s + i, rel, n);
+  memcpy(abs, s, i + n);
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *

@@ -49,6 +49,7 @@ void jb_command_error(char * path, const char * usage);
 int jb_file_copy(const char * src, const char * dst, size_t size);
 void * jb_file_read(const char * path, size_t size);
 int jb_file_write(const char * path, const void * buffer, size_t size);
+void jb_path_build(char * abs, const char * dir, const char * rel);
 char * jb_trim(char * s);
 
 

@@ -65,12 +65,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="jb.c" />
-    <ClCompile Include="path.c" />
     <ClCompile Include="plunge.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="jb.h" />
-    <ClInclude Include="path.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
